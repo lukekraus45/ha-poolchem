@@ -43,6 +43,7 @@ from pypoolchem.dosing.calculator import DosingResult
 from .const import (
     ACID_DRY_ACID,
     ACID_MURIATIC_14_5,
+    ACID_MURIATIC_20,
     ACID_MURIATIC_28_3,
     ACID_MURIATIC_31_45,
     ACID_MURIATIC_34_6,
@@ -66,11 +67,16 @@ from .const import (
     CONF_ENABLE_DOSE_CALCIUM,
     CONF_ENABLE_DOSE_CHLORINE,
     CONF_ENABLE_DOSE_CYA,
+    CONF_ENABLE_DOSE_PH_UP,
     CONF_ENABLE_DOSE_SALT,
+    CONF_ENABLE_DOSE_SHOCK,
     CONF_FC_ENTITY,
     CONF_PH_ENTITY,
+    CONF_PH_UP_TYPE,
     CONF_POOL_NAME,
     CONF_POOL_TYPE,
+    CONF_PRODUCT_PRESET,
+    CONF_PRODUCT_PROFILES,
     CONF_SALT_ENTITY,
     CONF_TA_ENTITY,
     CONF_TARGET_BORATES,
@@ -98,7 +104,10 @@ from .const import (
     DEFAULT_ENABLE_DOSE_CALCIUM,
     DEFAULT_ENABLE_DOSE_CHLORINE,
     DEFAULT_ENABLE_DOSE_CYA,
+    DEFAULT_ENABLE_DOSE_PH_UP,
     DEFAULT_ENABLE_DOSE_SALT,
+    DEFAULT_ENABLE_DOSE_SHOCK,
+    DEFAULT_PH_UP_TYPE,
     DEFAULT_SALT,
     DEFAULT_TARGET_BORATES,
     DEFAULT_TARGET_CH,
@@ -109,9 +118,18 @@ from .const import (
     DEFAULT_TARGET_TA,
     DEFAULT_TDS,
     DOMAIN,
+    PH_UP_BORAX,
+    PH_UP_SODA_ASH,
     PoolType,
     WaterBalanceState,
     WaterBodyType,
+)
+from .product_profiles import (
+    label_fixed_dose,
+    label_linear_dose,
+    label_table_dose,
+    load_product_profiles,
+    profile_chemical_type,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -119,10 +137,16 @@ _LOGGER = logging.getLogger(__name__)
 # Mapping from const acid types to pypoolchem ChemicalType
 ACID_TYPE_MAP: dict[str, ChemicalType] = {
     ACID_MURIATIC_14_5: ChemicalType.MURIATIC_ACID_14_5,
+    ACID_MURIATIC_20: ChemicalType.MURIATIC_ACID_20,
     ACID_MURIATIC_28_3: ChemicalType.MURIATIC_ACID_28_3,
     ACID_MURIATIC_31_45: ChemicalType.MURIATIC_ACID_31_45,
     ACID_MURIATIC_34_6: ChemicalType.MURIATIC_ACID_34_6,
     ACID_DRY_ACID: ChemicalType.DRY_ACID,
+}
+
+PH_UP_TYPE_MAP: dict[str, ChemicalType] = {
+    PH_UP_SODA_ASH: ChemicalType.SODA_ASH,
+    PH_UP_BORAX: ChemicalType.BORAX,
 }
 
 # Mapping from const chlorine types to pypoolchem ChemicalType
@@ -161,12 +185,14 @@ class PoolChemData:
 
     # Dosing recommendations
     dose_acid: DosingResult | None = None
+    dose_ph_up: DosingResult | None = None
     dose_chlorine: DosingResult | None = None
     dose_alkalinity: DosingResult | None = None
     dose_calcium: DosingResult | None = None
     dose_cya: DosingResult | None = None
     dose_salt: DosingResult | None = None
     dose_borates: DosingResult | None = None
+    dose_shock: DosingResult | None = None
 
     # Metadata
     last_updated: datetime | None = None
@@ -197,6 +223,10 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
             update_interval=None,  # Event-driven only
         )
         self.config_entry = entry
+        self.product_profiles = load_product_profiles(
+            entry.options.get(CONF_PRODUCT_PRESET),
+            entry.options.get(CONF_PRODUCT_PROFILES),
+        )
         self._entity_map: dict[str, str | None] = self._build_entity_map()
 
     def _build_entity_map(self) -> dict[str, str | None]:
@@ -283,6 +313,11 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
         """Get the configured acid chemical type."""
         acid_type = self._get_option(CONF_ACID_TYPE, DEFAULT_ACID_TYPE)
         return ACID_TYPE_MAP.get(acid_type, ChemicalType.MURIATIC_ACID_31_45)
+
+    def _get_ph_up_chemical_type(self) -> ChemicalType:
+        """Get the configured pH-raising chemical type."""
+        ph_up_type = self._get_option(CONF_PH_UP_TYPE, DEFAULT_PH_UP_TYPE)
+        return PH_UP_TYPE_MAP.get(ph_up_type, ChemicalType.SODA_ASH)
 
     def _get_chlorine_chemical_type(self) -> ChemicalType:
         """Get the configured chlorine chemical type."""
@@ -499,20 +534,65 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
             self._is_dose_enabled(CONF_ENABLE_DOSE_ACID, DEFAULT_ENABLE_DOSE_ACID)
             and ph is not None
             and ta is not None
+            and ph > self.target_ph
         ):
             try:
                 temp = temp_f or 80  # Default temp if not available
-                data.dose_acid = calculate_ph_dose(
-                    current_ph=ph,
-                    target_ph=self.target_ph,
-                    pool_gallons=volume,
-                    total_alkalinity=ta,
-                    temperature_f=temp,
-                    borates=borates,
-                    chemical_type=self._get_acid_chemical_type(),
-                )
+                acid_profile = self.product_profiles.get("acid", {})
+                if acid_profile.get("method") == "label_table":
+                    data.dose_acid = label_table_dose(
+                        acid_profile,
+                        current_ph=ph,
+                        total_alkalinity=ta,
+                        volume_gallons=volume,
+                        chemical_type=profile_chemical_type(
+                            acid_profile, self._get_acid_chemical_type()
+                        ),
+                    )
+                else:
+                    data.dose_acid = calculate_ph_dose(
+                        current_ph=ph,
+                        target_ph=self.target_ph,
+                        pool_gallons=volume,
+                        total_alkalinity=ta,
+                        temperature_f=temp,
+                        borates=borates,
+                        chemical_type=self._get_acid_chemical_type(),
+                    )
             except Exception as err:
                 _LOGGER.debug("pH dose calculation failed: %s", err)
+
+        # Raising and lowering pH use different products and separate sensors.
+        if (
+            self._is_dose_enabled(CONF_ENABLE_DOSE_PH_UP, DEFAULT_ENABLE_DOSE_PH_UP)
+            and ph is not None
+            and ta is not None
+            and ph < self.target_ph
+        ):
+            try:
+                ph_up_profile = self.product_profiles.get("ph_up", {})
+                if ph_up_profile.get("method") == "label_table":
+                    data.dose_ph_up = label_table_dose(
+                        ph_up_profile,
+                        current_ph=ph,
+                        total_alkalinity=ta,
+                        volume_gallons=volume,
+                        chemical_type=profile_chemical_type(
+                            ph_up_profile, self._get_ph_up_chemical_type()
+                        ),
+                    )
+                else:
+                    data.dose_ph_up = calculate_ph_dose(
+                        current_ph=ph,
+                        target_ph=self.target_ph,
+                        pool_gallons=volume,
+                        total_alkalinity=ta,
+                        temperature_f=temp_f or 80,
+                        borates=borates,
+                        chemical_type=self._get_ph_up_chemical_type(),
+                    )
+            except Exception as err:
+                _LOGGER.debug("pH increaser dose calculation failed: %s", err)
 
         # Chlorine dose
         if (
@@ -522,12 +602,24 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
             and fc is not None
         ):
             try:
-                data.dose_chlorine = calculate_chlorine_dose(
-                    current_fc=fc,
-                    target_fc=self.target_fc,
-                    pool_gallons=volume,
-                    chemical_type=self._get_chlorine_chemical_type(),
-                )
+                profile = self.product_profiles.get("chlorine", {})
+                if profile.get("method") == "label_linear":
+                    data.dose_chlorine = label_linear_dose(
+                        profile,
+                        current=fc,
+                        target=self.target_fc,
+                        volume_gallons=volume,
+                        chemical_type=profile_chemical_type(
+                            profile, self._get_chlorine_chemical_type()
+                        ),
+                    )
+                else:
+                    data.dose_chlorine = calculate_chlorine_dose(
+                        current_fc=fc,
+                        target_fc=self.target_fc,
+                        pool_gallons=volume,
+                        chemical_type=self._get_chlorine_chemical_type(),
+                    )
             except Exception as err:
                 _LOGGER.debug("Chlorine dose calculation failed: %s", err)
 
@@ -539,11 +631,23 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
             and ta is not None
         ):
             try:
-                data.dose_alkalinity = calculate_alkalinity_dose(
-                    current_ta=ta,
-                    target_ta=self.target_ta,
-                    pool_gallons=volume,
-                )
+                alkalinity_profile = self.product_profiles.get("alkalinity", {})
+                if alkalinity_profile.get("method") == "label_linear":
+                    data.dose_alkalinity = label_linear_dose(
+                        alkalinity_profile,
+                        current=ta,
+                        target=self.target_ta,
+                        volume_gallons=volume,
+                        chemical_type=profile_chemical_type(
+                            alkalinity_profile, ChemicalType.BAKING_SODA
+                        ),
+                    )
+                else:
+                    data.dose_alkalinity = calculate_alkalinity_dose(
+                        current_ta=ta,
+                        target_ta=self.target_ta,
+                        pool_gallons=volume,
+                    )
             except Exception as err:
                 _LOGGER.debug("Alkalinity dose calculation failed: %s", err)
 
@@ -553,22 +657,46 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
             and ch is not None
         ):
             try:
-                data.dose_calcium = calculate_calcium_dose(
-                    current_ch=ch,
-                    target_ch=self.target_ch,
-                    pool_gallons=volume,
-                )
+                profile = self.product_profiles.get("calcium", {})
+                if profile.get("method") == "label_linear":
+                    data.dose_calcium = label_linear_dose(
+                        profile,
+                        current=ch,
+                        target=self.target_ch,
+                        volume_gallons=volume,
+                        chemical_type=profile_chemical_type(
+                            profile, ChemicalType.CALCIUM_CHLORIDE_DIHYDRATE
+                        ),
+                    )
+                else:
+                    data.dose_calcium = calculate_calcium_dose(
+                        current_ch=ch,
+                        target_ch=self.target_ch,
+                        pool_gallons=volume,
+                    )
             except Exception as err:
                 _LOGGER.debug("Calcium dose calculation failed: %s", err)
 
         # CYA dose
         if self._is_dose_enabled(CONF_ENABLE_DOSE_CYA, DEFAULT_ENABLE_DOSE_CYA):
             try:
-                data.dose_cya = calculate_cya_dose(
-                    current_cya=cya,
-                    target_cya=self.target_cya,
-                    pool_gallons=volume,
-                )
+                profile = self.product_profiles.get("cya", {})
+                if profile.get("method") == "label_linear":
+                    data.dose_cya = label_linear_dose(
+                        profile,
+                        current=cya,
+                        target=self.target_cya,
+                        volume_gallons=volume,
+                        chemical_type=profile_chemical_type(
+                            profile, ChemicalType.CYA_GRANULAR
+                        ),
+                    )
+                else:
+                    data.dose_cya = calculate_cya_dose(
+                        current_cya=cya,
+                        target_cya=self.target_cya,
+                        pool_gallons=volume,
+                    )
             except Exception as err:
                 _LOGGER.debug("CYA dose calculation failed: %s", err)
 
@@ -578,21 +706,62 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
             and self.is_saltwater
         ):
             try:
-                data.dose_salt = calculate_salt_dose(
-                    current_salt=salt,
-                    target_salt=self.target_salt,
-                    pool_gallons=volume,
-                )
+                profile = self.product_profiles.get("salt", {})
+                if profile.get("method") == "label_linear":
+                    data.dose_salt = label_linear_dose(
+                        profile,
+                        current=salt,
+                        target=self.target_salt,
+                        volume_gallons=volume,
+                        chemical_type=profile_chemical_type(
+                            profile, ChemicalType.POOL_SALT
+                        ),
+                    )
+                else:
+                    data.dose_salt = calculate_salt_dose(
+                        current_salt=salt,
+                        target_salt=self.target_salt,
+                        pool_gallons=volume,
+                    )
             except Exception as err:
                 _LOGGER.debug("Salt dose calculation failed: %s", err)
 
         # Borates dose
         if self._is_dose_enabled(CONF_ENABLE_DOSE_BORATES, DEFAULT_ENABLE_DOSE_BORATES):
             try:
-                data.dose_borates = calculate_borate_dose(
-                    current_borates=borates,
-                    target_borates=self.target_borates,
-                    pool_gallons=volume,
-                )
+                profile = self.product_profiles.get("borates", {})
+                if profile.get("method") == "label_linear":
+                    data.dose_borates = label_linear_dose(
+                        profile,
+                        current=borates,
+                        target=self.target_borates,
+                        volume_gallons=volume,
+                        chemical_type=profile_chemical_type(
+                            profile, ChemicalType.BORAX_BORATE
+                        ),
+                    )
+                else:
+                    data.dose_borates = calculate_borate_dose(
+                        current_borates=borates,
+                        target_borates=self.target_borates,
+                        pool_gallons=volume,
+                    )
             except Exception as err:
                 _LOGGER.debug("Borates dose calculation failed: %s", err)
+
+        # Shock is a separate oxidizer regimen, not a sanitizer residual target.
+        shock_profile = self.product_profiles.get("shock", {})
+        if (
+            self._is_dose_enabled(CONF_ENABLE_DOSE_SHOCK, DEFAULT_ENABLE_DOSE_SHOCK)
+            and shock_profile.get("method") == "label_fixed"
+        ):
+            try:
+                data.dose_shock = label_fixed_dose(
+                    shock_profile,
+                    volume_gallons=volume,
+                    chemical_type=profile_chemical_type(
+                        shock_profile, ChemicalType.DICHLOR
+                    ),
+                )
+            except Exception as err:
+                _LOGGER.debug("Shock label dose calculation failed: %s", err)

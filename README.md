@@ -56,8 +56,13 @@ pH, free chlorine (FC), total alkalinity (TA), and calcium hardness (CH).
 (saltwater pools), total dissolved solids (TDS), and borates.
 
 **Options (post-setup):** target chemistry values (pH, FC, TA, CH, CYA, salt), chemical types
-(acid concentration, chlorine source), and per-sensor enable/disable toggles. Access via
+(acid concentration, pH increaser, chlorine source), built-in/custom product label profiles,
+and per-sensor enable/disable toggles. Access via
 **Settings → Devices & Services → Pool Chem → Configure**.
+
+For label-based dosing, including the SpaGuard spa profile and custom pool/spa products, see
+[Product label profiles](docs/PRODUCT_PROFILES.md). pH increaser label directions that require
+an alkali-demand test are not inferred from a pH strip reading.
 
 ## Supported Equipment
 
@@ -75,12 +80,14 @@ Pool Chem works with any sensor entity. Tested source integrations include:
 | `sensor.{pool}_lsi` | Langelier Saturation Index |
 | `sensor.{pool}_water_balance` | State: balanced, slightly_corrosive, slightly_scaling, severely_corrosive, severely_scaling |
 | `sensor.{pool}_fc_cya_ratio` | FC/CYA ratio as a percentage (7.5 %+ recommended) |
-| `sensor.{pool}_acid_dose` | Acid needed to reach target pH (fl oz) |
+| `sensor.{pool}_acid_dose` | Acid product dose for lowering pH (configured product unit) |
+| `sensor.{pool}_ph_increaser_dose` | Base product dose for raising pH (configured product unit) |
 | `sensor.{pool}_chlorine_dose` | Chlorine needed to reach target FC (fl oz) |
 | `sensor.{pool}_baking_soda_dose` | Baking soda needed to raise TA (oz) |
 | `sensor.{pool}_calcium_dose` | Calcium chloride to raise CH (oz) |
 | `sensor.{pool}_stabilizer_dose` | CYA needed to reach target (oz) |
 | `sensor.{pool}_salt_dose` | Salt needed — saltwater pools only (lbs) |
+| `sensor.{pool}_shock_dose` | Separate product-label oxidizer dose (configured product unit) |
 
 ### Water Balance Thresholds
 

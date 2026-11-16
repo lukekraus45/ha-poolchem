@@ -9,6 +9,8 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.poolchem.const import (
+    ACID_DRY_ACID,
+    CONF_ACID_TYPE,
     CONF_CH_ENTITY,
     CONF_FC_ENTITY,
     CONF_PH_ENTITY,
@@ -153,6 +155,29 @@ async def test_dosing_sensors_created(
     # Check alkalinity dose sensor exists
     alk_state = hass.states.get("sensor.test_pool_baking_soda_dose")
     assert alk_state is not None
+
+
+async def test_dry_acid_sensor_uses_weight_unit(
+    hass: HomeAssistant,
+    mock_source_entities: None,
+    mock_config_entry_data: dict[str, Any],
+) -> None:
+    """Dry-acid weight doses must not be published as fluid ounces."""
+    hass.states.async_set("sensor.pool_ph", "8.0")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=mock_config_entry_data,
+        options={CONF_ACID_TYPE: ACID_DRY_ACID},
+    )
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("sensor.test_pool_acid_dose")
+    assert state is not None
+    assert state.attributes["unit_of_measurement"] == "oz"
+    assert state.attributes["unit"] == "oz"
 
 
 async def test_spa_defaults_hide_doses_and_pool_fc_cya_ratio(

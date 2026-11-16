@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Label-backed, water-volume-scaled product profiles for acid, pH increaser,
+  alkalinity, chlorine, calcium, stabilizer, salt, borates, and oxidizer shock.
+- A SpaGuard spa preset, 20% muriatic-acid support, distinct pH-up/acid sensors,
+  dynamic dry-acid units, and label-based shock dose output.
+- Regression coverage for SpaGuard label rates, practical dose rounding, caps,
+  and correct low-pH product selection.
+
 - GitHub Actions CI: Ruff, mypy, pytest, HACS and hassfest validation on every push and pull request.
 
 ### Fixed

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -25,7 +25,9 @@ from .const import (
     CONF_ENABLE_DOSE_CALCIUM,
     CONF_ENABLE_DOSE_CHLORINE,
     CONF_ENABLE_DOSE_CYA,
+    CONF_ENABLE_DOSE_PH_UP,
     CONF_ENABLE_DOSE_SALT,
+    CONF_ENABLE_DOSE_SHOCK,
     CONF_POOL_TYPE,
     CONF_WATER_BODY_TYPE,
     DEFAULT_ENABLE_DOSE_ACID,
@@ -34,7 +36,9 @@ from .const import (
     DEFAULT_ENABLE_DOSE_CALCIUM,
     DEFAULT_ENABLE_DOSE_CHLORINE,
     DEFAULT_ENABLE_DOSE_CYA,
+    DEFAULT_ENABLE_DOSE_PH_UP,
     DEFAULT_ENABLE_DOSE_SALT,
+    DEFAULT_ENABLE_DOSE_SHOCK,
     SENSOR_CSI,
     SENSOR_DOSE_ACID,
     SENSOR_DOSE_ALKALINITY,
@@ -42,7 +46,9 @@ from .const import (
     SENSOR_DOSE_CALCIUM,
     SENSOR_DOSE_CHLORINE,
     SENSOR_DOSE_CYA,
+    SENSOR_DOSE_PH_UP,
     SENSOR_DOSE_SALT,
+    SENSOR_DOSE_SHOCK,
     SENSOR_FC_CYA_RATIO,
     SENSOR_LSI,
     SENSOR_TARGET_CSI,
@@ -56,6 +62,7 @@ from .const import (
 )
 from .coordinator import PoolChemCoordinator, PoolChemData
 from .entity import PoolChemEntity
+from .product_profiles import product_unit
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -302,6 +309,16 @@ DOSING_SENSORS: dict[str, PoolChemSensorEntityDescription] = {
         extra_attrs_fn=_make_dose_attrs_fn("dose_acid"),
         available_fn=_make_dose_available_fn("dose_acid"),
     ),
+    SENSOR_DOSE_PH_UP: PoolChemSensorEntityDescription(
+        key=SENSOR_DOSE_PH_UP,
+        translation_key="dose_ph_up",
+        native_unit_of_measurement="oz",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:flask-plus-outline",
+        value_fn=_make_dose_value_fn("dose_ph_up"),
+        extra_attrs_fn=_make_dose_attrs_fn("dose_ph_up"),
+        available_fn=_make_dose_available_fn("dose_ph_up"),
+    ),
     SENSOR_DOSE_CHLORINE: PoolChemSensorEntityDescription(
         key=SENSOR_DOSE_CHLORINE,
         translation_key="dose_chlorine",
@@ -362,11 +379,22 @@ DOSING_SENSORS: dict[str, PoolChemSensorEntityDescription] = {
         extra_attrs_fn=_make_dose_attrs_fn("dose_borates"),
         available_fn=_make_dose_available_fn("dose_borates"),
     ),
+    SENSOR_DOSE_SHOCK: PoolChemSensorEntityDescription(
+        key=SENSOR_DOSE_SHOCK,
+        translation_key="dose_shock",
+        native_unit_of_measurement="oz",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:chemical-weapon",
+        value_fn=_make_dose_value_fn("dose_shock"),
+        extra_attrs_fn=_make_dose_attrs_fn("dose_shock"),
+        available_fn=_make_dose_available_fn("dose_shock"),
+    ),
 }
 
 # Mapping of config keys to sensor keys
 DOSING_CONFIG_MAP: dict[str, tuple[str, bool]] = {
     CONF_ENABLE_DOSE_ACID: (SENSOR_DOSE_ACID, DEFAULT_ENABLE_DOSE_ACID),
+    CONF_ENABLE_DOSE_PH_UP: (SENSOR_DOSE_PH_UP, DEFAULT_ENABLE_DOSE_PH_UP),
     CONF_ENABLE_DOSE_CHLORINE: (SENSOR_DOSE_CHLORINE, DEFAULT_ENABLE_DOSE_CHLORINE),
     CONF_ENABLE_DOSE_ALKALINITY: (
         SENSOR_DOSE_ALKALINITY,
@@ -376,6 +404,7 @@ DOSING_CONFIG_MAP: dict[str, tuple[str, bool]] = {
     CONF_ENABLE_DOSE_CYA: (SENSOR_DOSE_CYA, DEFAULT_ENABLE_DOSE_CYA),
     CONF_ENABLE_DOSE_SALT: (SENSOR_DOSE_SALT, DEFAULT_ENABLE_DOSE_SALT),
     CONF_ENABLE_DOSE_BORATES: (SENSOR_DOSE_BORATES, DEFAULT_ENABLE_DOSE_BORATES),
+    CONF_ENABLE_DOSE_SHOCK: (SENSOR_DOSE_SHOCK, DEFAULT_ENABLE_DOSE_SHOCK),
 }
 
 
@@ -392,6 +421,15 @@ async def async_setup_entry(
     is_spa = (
         entry.data.get(CONF_WATER_BODY_TYPE, WaterBodyType.POOL) == WaterBodyType.SPA
     )
+    acid_unit = "oz" if entry.options.get("acid_type") == "dry_acid" else "fl oz"
+    product_units = {
+        SENSOR_DOSE_ACID: product_unit(coordinator.product_profiles, "acid", acid_unit),
+        SENSOR_DOSE_PH_UP: product_unit(coordinator.product_profiles, "ph_up", "oz"),
+        SENSOR_DOSE_ALKALINITY: product_unit(
+            coordinator.product_profiles, "alkalinity", "oz"
+        ),
+        SENSOR_DOSE_SHOCK: product_unit(coordinator.product_profiles, "shock", "oz"),
+    }
 
     # Add core water balance sensors
     for description in WATER_BALANCE_SENSORS:
@@ -413,6 +451,11 @@ async def async_setup_entry(
             ),
         ):
             description = DOSING_SENSORS[sensor_key]
+            if sensor_key in product_units:
+                description = replace(
+                    description,
+                    native_unit_of_measurement=product_units[sensor_key],
+                )
             entities.append(PoolChemSensor(coordinator, description))
 
     async_add_entities(entities)

@@ -10,7 +10,18 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.poolchem.const import (
+    ACID_MURIATIC_20,
+    CONF_ACID_TYPE,
+    CONF_ENABLE_DOSE_ACID,
+    CONF_ENABLE_DOSE_ALKALINITY,
+    CONF_ENABLE_DOSE_PH_UP,
+    CONF_ENABLE_DOSE_SHOCK,
+    CONF_PH_UP_TYPE,
+    CONF_PRODUCT_PRESET,
+    CONF_PRODUCT_PROFILES,
+    CONF_TARGET_TA,
     DOMAIN,
+    PH_UP_SODA_ASH,
     WaterBalanceState,
 )
 from custom_components.poolchem.coordinator import PoolChemCoordinator
@@ -176,6 +187,89 @@ async def test_coordinator_calculates_doses(
     # Should have chlorine dose recommendation (FC 2 -> 5)
     assert coordinator.data.dose_chlorine is not None
     assert coordinator.data.dose_chlorine.amount > 0
+
+
+async def test_coordinator_uses_configured_spa_label_profiles(
+    hass: HomeAssistant,
+    mock_source_entities: None,
+    mock_config_entry_data: dict[str, Any],
+) -> None:
+    """Configured label rules replace generic SpaGuard product guesses."""
+    mock_config_entry_data["volume_gallons"] = 335
+    hass.states.async_set("sensor.pool_ph", "8.4")
+    hass.states.async_set("sensor.pool_ta", "240")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=mock_config_entry_data,
+        options={
+            CONF_ENABLE_DOSE_ACID: True,
+            CONF_ENABLE_DOSE_ALKALINITY: True,
+            CONF_ENABLE_DOSE_PH_UP: False,
+            CONF_ENABLE_DOSE_SHOCK: True,
+            CONF_PRODUCT_PRESET: "spaguard_spa",
+            CONF_PRODUCT_PROFILES: "{}",
+            CONF_TARGET_TA: 250,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = await async_setup_coordinator(hass, entry)
+    assert coordinator.data is not None
+    assert coordinator.data.dose_acid is not None
+    assert coordinator.data.dose_acid.amount == 2.5
+    assert coordinator.data.dose_acid.unit == "tsp"
+    assert coordinator.data.dose_alkalinity is not None
+    assert coordinator.data.dose_alkalinity.amount == 4.0
+    assert coordinator.data.dose_alkalinity.unit == "tsp"
+    assert coordinator.data.dose_shock is not None
+    assert coordinator.data.dose_shock.amount == 2.0
+    assert coordinator.data.dose_shock.unit == "tbsp"
+
+
+async def test_ph_direction_uses_distinct_product_and_sensor(
+    hass: HomeAssistant,
+    mock_source_entities: None,
+    mock_config_entry_data: dict[str, Any],
+) -> None:
+    """Low pH uses base chemistry, never the configured acid product."""
+    hass.states.async_set("sensor.pool_ph", "7.2")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=mock_config_entry_data,
+        options={
+            CONF_ENABLE_DOSE_ACID: True,
+            CONF_ENABLE_DOSE_PH_UP: True,
+            CONF_PH_UP_TYPE: PH_UP_SODA_ASH,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = await async_setup_coordinator(hass, entry)
+    assert coordinator.data is not None
+    assert coordinator.data.dose_acid is None
+    assert coordinator.data.dose_ph_up is not None
+    assert coordinator.data.dose_ph_up.amount > 0
+    assert "soda ash" in coordinator.data.dose_ph_up.chemical.name.lower()
+
+
+async def test_twenty_percent_muriatic_acid_is_supported(
+    hass: HomeAssistant,
+    mock_source_entities: None,
+    mock_config_entry_data: dict[str, Any],
+) -> None:
+    """The integration exposes the household's 20% muriatic acid strength."""
+    hass.states.async_set("sensor.pool_ph", "8.0")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=mock_config_entry_data,
+        options={CONF_ACID_TYPE: ACID_MURIATIC_20},
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = await async_setup_coordinator(hass, entry)
+    assert coordinator.data is not None
+    assert coordinator.data.dose_acid is not None
+    assert "20%" in coordinator.data.dose_acid.chemical.name
 
 
 async def test_coordinator_updates_on_state_change(

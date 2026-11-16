@@ -41,11 +41,16 @@ from .const import (
     CONF_ENABLE_DOSE_CALCIUM,
     CONF_ENABLE_DOSE_CHLORINE,
     CONF_ENABLE_DOSE_CYA,
+    CONF_ENABLE_DOSE_PH_UP,
     CONF_ENABLE_DOSE_SALT,
+    CONF_ENABLE_DOSE_SHOCK,
     CONF_FC_ENTITY,
     CONF_PH_ENTITY,
+    CONF_PH_UP_TYPE,
     CONF_POOL_NAME,
     CONF_POOL_TYPE,
+    CONF_PRODUCT_PRESET,
+    CONF_PRODUCT_PROFILES,
     CONF_SALT_ENTITY,
     CONF_SURFACE_TYPE,
     CONF_TA_ENTITY,
@@ -55,14 +60,28 @@ from .const import (
     CONF_WATER_BODY_TYPE,
     DEFAULT_ACID_TYPE,
     DEFAULT_CHLORINE_TYPE,
+    DEFAULT_PH_UP_TYPE,
     DOMAIN,
+    PH_UP_TYPE_OPTIONS,
+    PRODUCT_PRESET_NONE,
+    PRODUCT_PRESET_OPTIONS,
     PoolType,
     SurfaceType,
     WaterBodyType,
     default_dose_enabled,
 )
+from .product_profiles import parse_product_profiles
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _validate_product_profiles(value: str) -> str:
+    """Validate product label profile JSON while keeping its text for storage."""
+    try:
+        parse_product_profiles(value)
+    except (TypeError, ValueError) as err:
+        raise vol.Invalid(str(err)) from err
+    return value
 
 
 class PoolChemConfigFlow(HAConfigFlow, domain=DOMAIN):
@@ -415,6 +434,32 @@ class PoolChemConfigFlow(HAConfigFlow, domain=DOMAIN):
                             translation_key="chlorine_type",
                         )
                     ),
+                    vol.Optional(
+                        CONF_PH_UP_TYPE, default=DEFAULT_PH_UP_TYPE
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=PH_UP_TYPE_OPTIONS,
+                            mode=SelectSelectorMode.DROPDOWN,
+                            translation_key="ph_up_type",
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_PRODUCT_PRESET, default=PRODUCT_PRESET_NONE
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=PRODUCT_PRESET_OPTIONS,
+                            mode=SelectSelectorMode.DROPDOWN,
+                            translation_key="product_preset",
+                        )
+                    ),
+                    vol.Optional(CONF_PRODUCT_PROFILES, default="{}"): vol.All(
+                        TextSelector(
+                            TextSelectorConfig(
+                                type=TextSelectorType.TEXT, multiline=True
+                            )
+                        ),
+                        _validate_product_profiles,
+                    ),
                 }
             ),
         )
@@ -460,6 +505,14 @@ class PoolChemConfigFlow(HAConfigFlow, domain=DOMAIN):
             vol.Optional(
                 CONF_ENABLE_DOSE_BORATES,
                 default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_BORATES),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_DOSE_SHOCK,
+                default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_SHOCK),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_DOSE_PH_UP,
+                default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_PH_UP),
             ): bool,
         }
 
@@ -528,6 +581,37 @@ class OptionsFlowHandler(OptionsFlow):
                             translation_key="chlorine_type",
                         )
                     ),
+                    vol.Optional(
+                        CONF_PH_UP_TYPE,
+                        default=current.get(CONF_PH_UP_TYPE, DEFAULT_PH_UP_TYPE),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=PH_UP_TYPE_OPTIONS,
+                            mode=SelectSelectorMode.DROPDOWN,
+                            translation_key="ph_up_type",
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_PRODUCT_PRESET,
+                        default=current.get(CONF_PRODUCT_PRESET, PRODUCT_PRESET_NONE),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=PRODUCT_PRESET_OPTIONS,
+                            mode=SelectSelectorMode.DROPDOWN,
+                            translation_key="product_preset",
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_PRODUCT_PROFILES,
+                        default=current.get(CONF_PRODUCT_PROFILES, "{}"),
+                    ): vol.All(
+                        TextSelector(
+                            TextSelectorConfig(
+                                type=TextSelectorType.TEXT, multiline=True
+                            )
+                        ),
+                        _validate_product_profiles,
+                    ),
                 }
             ),
         )
@@ -587,6 +671,20 @@ class OptionsFlowHandler(OptionsFlow):
                 default=current.get(
                     CONF_ENABLE_DOSE_BORATES,
                     default_dose_enabled(water_body, CONF_ENABLE_DOSE_BORATES),
+                ),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_DOSE_SHOCK,
+                default=current.get(
+                    CONF_ENABLE_DOSE_SHOCK,
+                    default_dose_enabled(water_body, CONF_ENABLE_DOSE_SHOCK),
+                ),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_DOSE_PH_UP,
+                default=current.get(
+                    CONF_ENABLE_DOSE_PH_UP,
+                    default_dose_enabled(water_body, CONF_ENABLE_DOSE_PH_UP),
                 ),
             ): bool,
         }

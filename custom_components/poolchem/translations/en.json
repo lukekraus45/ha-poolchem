@@ -14,7 +14,9 @@
       "surface": {
         "title": "Pool Surface",
         "description": "Select the pool surface. Spas do not require a pool surface.",
-        "data": {"surface_type": "Surface Type"}
+        "data": {
+          "surface_type": "Surface Type"
+        }
       },
       "required_entities": {
         "title": "Required Sensors",
@@ -42,7 +44,10 @@
         "description": "Select the chemicals you use for pool maintenance.",
         "data": {
           "acid_type": "Acid Type (for lowering pH)",
-          "chlorine_type": "Chlorine Type"
+          "chlorine_type": "Chlorine Type",
+          "product_profiles_json": "Custom product label profiles (JSON)",
+          "ph_up_type": "pH Increaser Type",
+          "product_preset": "Built-in Product Profile"
         }
       },
       "dosing_sensors": {
@@ -55,7 +60,9 @@
           "enable_dose_calcium": "Enable Calcium Dose Sensor",
           "enable_dose_cya": "Enable Stabilizer Dose Sensor",
           "enable_dose_salt": "Enable Salt Dose Sensor",
-          "enable_dose_borates": "Enable Borates Dose Sensor"
+          "enable_dose_borates": "Enable Borates Dose Sensor",
+          "enable_dose_shock": "Enable label-based Shock Dose Sensor",
+          "enable_dose_ph_up": "Enable pH Increaser Dose Sensor"
         }
       },
       "reconfigure_pool": {
@@ -71,7 +78,9 @@
       "reconfigure_surface": {
         "title": "Pool Surface",
         "description": "Select the pool surface. Spas do not require a pool surface.",
-        "data": {"surface_type": "Surface Type"}
+        "data": {
+          "surface_type": "Surface Type"
+        }
       },
       "reconfigure_entities": {
         "title": "Reconfigure Sensors",
@@ -105,7 +114,10 @@
         "description": "Select the chemicals you use for pool maintenance.",
         "data": {
           "acid_type": "Acid Type (for lowering pH)",
-          "chlorine_type": "Chlorine Type"
+          "chlorine_type": "Chlorine Type",
+          "product_profiles_json": "Custom product label profiles (JSON)",
+          "ph_up_type": "pH Increaser Type",
+          "product_preset": "Built-in Product Profile"
         }
       },
       "dosing_sensors": {
@@ -118,14 +130,19 @@
           "enable_dose_calcium": "Enable Calcium Dose Sensor",
           "enable_dose_cya": "Enable Stabilizer Dose Sensor",
           "enable_dose_salt": "Enable Salt Dose Sensor",
-          "enable_dose_borates": "Enable Borates Dose Sensor"
+          "enable_dose_borates": "Enable Borates Dose Sensor",
+          "enable_dose_shock": "Enable label-based Shock Dose Sensor",
+          "enable_dose_ph_up": "Enable pH Increaser Dose Sensor"
         }
       }
     }
   },
   "selector": {
     "water_body_type": {
-      "options": {"pool": "Pool", "spa": "Spa / Hot Tub"}
+      "options": {
+        "pool": "Pool",
+        "spa": "Spa / Hot Tub"
+      }
     },
     "pool_type": {
       "options": {
@@ -146,6 +163,7 @@
     "acid_type": {
       "options": {
         "muriatic_14_5": "Muriatic Acid 14.5%",
+        "muriatic_20": "Muriatic Acid 20%",
         "muriatic_28_3": "Muriatic Acid 28.3%",
         "muriatic_31_45": "Muriatic Acid 31.45%",
         "muriatic_34_6": "Muriatic Acid 34.6%",
@@ -162,6 +180,18 @@
         "cal_hypo_73": "Cal-Hypo 73%",
         "dichlor": "Dichlor",
         "trichlor": "Trichlor"
+      }
+    },
+    "ph_up_type": {
+      "options": {
+        "soda_ash": "Soda Ash",
+        "borax": "Borax"
+      }
+    },
+    "product_preset": {
+      "options": {
+        "none": "No preset",
+        "spaguard_spa": "SpaGuard spa products"
       }
     }
   },
@@ -247,6 +277,12 @@
       },
       "dose_borates": {
         "name": "Borates Dose"
+      },
+      "dose_ph_up": {
+        "name": "pH Increaser Dose"
+      },
+      "dose_shock": {
+        "name": "Shock Dose"
       }
     }
   }

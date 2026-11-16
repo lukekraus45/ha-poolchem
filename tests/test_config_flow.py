@@ -15,8 +15,11 @@ from custom_components.poolchem.const import (
     CONF_ENABLE_DOSE_ACID,
     CONF_FC_ENTITY,
     CONF_PH_ENTITY,
+    CONF_PH_UP_TYPE,
     CONF_POOL_NAME,
     CONF_POOL_TYPE,
+    CONF_PRODUCT_PRESET,
+    CONF_PRODUCT_PROFILES,
     CONF_SALT_ENTITY,
     CONF_SURFACE_TYPE,
     CONF_TA_ENTITY,
@@ -25,6 +28,7 @@ from custom_components.poolchem.const import (
     CONF_WATER_BODY_TYPE,
     DEFAULT_ACID_TYPE,
     DEFAULT_CHLORINE_TYPE,
+    DEFAULT_PH_UP_TYPE,
     DOMAIN,
     PoolType,
     SurfaceType,
@@ -96,6 +100,9 @@ async def test_user_flow_creates_entry(
         {
             CONF_ACID_TYPE: DEFAULT_ACID_TYPE,
             CONF_CHLORINE_TYPE: DEFAULT_CHLORINE_TYPE,
+            CONF_PH_UP_TYPE: DEFAULT_PH_UP_TYPE,
+            CONF_PRODUCT_PROFILES: "{}",
+            CONF_PRODUCT_PRESET: "spaguard_spa",
         },
     )
 
@@ -121,6 +128,9 @@ async def test_user_flow_creates_entry(
     # Chemicals, dosing toggles go in options (targets are now number entities)
     assert result["options"][CONF_ACID_TYPE] == DEFAULT_ACID_TYPE
     assert result["options"][CONF_CHLORINE_TYPE] == DEFAULT_CHLORINE_TYPE
+    assert result["options"][CONF_PH_UP_TYPE] == DEFAULT_PH_UP_TYPE
+    assert result["options"][CONF_PRODUCT_PRESET] == "spaguard_spa"
+    assert result["options"][CONF_PRODUCT_PROFILES] == "{}"
     assert result["options"][CONF_ENABLE_DOSE_ACID] is True
 
 
