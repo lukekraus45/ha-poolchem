@@ -79,6 +79,8 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+          # Forks are evaluated for integration code; their repo settings are not upstream metadata.
+          ignore: ${{ (github.repository == 'lukekraus45/ha-poolchem' || github.event.pull_request.head.repo.full_name == 'lukekraus45/ha-poolchem') && 'issues topics' || '' }}
 
   validate-hassfest:
     name: Hassfest Validation
