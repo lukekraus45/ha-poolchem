@@ -83,6 +83,7 @@ from .const import (
     CONF_TDS_ENTITY,
     CONF_TEMP_ENTITY,
     CONF_VOLUME_GALLONS,
+    CONF_WATER_BODY_TYPE,
     CSI_BALANCED_HIGH,
     CSI_BALANCED_LOW,
     CSI_SEVERELY_CORROSIVE,
@@ -110,6 +111,7 @@ from .const import (
     DOMAIN,
     PoolType,
     WaterBalanceState,
+    WaterBodyType,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -221,6 +223,14 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
     def is_saltwater(self) -> bool:
         """Return True if this is a saltwater pool."""
         return self.pool_type == PoolType.SALTWATER
+
+    @property
+    def is_spa(self) -> bool:
+        """Return True when this entry represents a spa/hot tub."""
+        return (
+            self.config_entry.data.get(CONF_WATER_BODY_TYPE, WaterBodyType.POOL)
+            == WaterBodyType.SPA
+        )
 
     def _get_option(self, key: str, default: Any) -> Any:
         """Get option value from options, falling back to default.
@@ -402,13 +412,13 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
             errors.append(f"Missing required sensors: {', '.join(missing)}")
 
         # Calculate FC/CYA ratio if we have FC
-        if fc is not None and cya > 0:
+        if not self.is_spa and fc is not None and cya > 0:
             data.fc_cya_ratio = (fc / cya) * 100
             # TFP recommends minimum FC/CYA ratio of 7.5% for traditional pools
             # and lower for SWG pools
             min_ratio = 5.0 if self.is_saltwater else 7.5
             data.fc_is_adequate = data.fc_cya_ratio >= min_ratio
-        elif fc is not None and cya == 0:
+        elif not self.is_spa and fc is not None and cya == 0:
             # No CYA means any FC is "adequate" but ratio is undefined
             data.fc_cya_ratio = None
             data.fc_is_adequate = fc > 0

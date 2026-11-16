@@ -52,18 +52,14 @@ from .const import (
     CONF_TDS_ENTITY,
     CONF_TEMP_ENTITY,
     CONF_VOLUME_GALLONS,
+    CONF_WATER_BODY_TYPE,
     DEFAULT_ACID_TYPE,
     DEFAULT_CHLORINE_TYPE,
-    DEFAULT_ENABLE_DOSE_ACID,
-    DEFAULT_ENABLE_DOSE_ALKALINITY,
-    DEFAULT_ENABLE_DOSE_BORATES,
-    DEFAULT_ENABLE_DOSE_CALCIUM,
-    DEFAULT_ENABLE_DOSE_CHLORINE,
-    DEFAULT_ENABLE_DOSE_CYA,
-    DEFAULT_ENABLE_DOSE_SALT,
     DOMAIN,
     PoolType,
     SurfaceType,
+    WaterBodyType,
+    default_dose_enabled,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -103,6 +99,9 @@ class PoolChemConfigFlow(HAConfigFlow, domain=DOMAIN):
         self._data = dict(self._reconfigure_entry.data)
         self._options = dict(self._reconfigure_entry.options)
 
+        # Existing entries predate explicit water-body profiles and are pools.
+        self._data.setdefault(CONF_WATER_BODY_TYPE, WaterBodyType.POOL)
+
         return await self.async_step_reconfigure_pool(user_input)
 
     async def async_step_reconfigure_pool(
@@ -113,52 +112,80 @@ class PoolChemConfigFlow(HAConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             self._data.update(user_input)
-            return await self.async_step_reconfigure_entities()
+            if self._data[CONF_WATER_BODY_TYPE] == WaterBodyType.SPA:
+                self._data.pop(CONF_SURFACE_TYPE, None)
+                return await self.async_step_reconfigure_entities()
+            return await self.async_step_reconfigure_surface()
 
         current = self._data
 
+        schema: dict[vol.Marker, Any] = {
+            vol.Required(
+                CONF_POOL_NAME, default=current.get(CONF_POOL_NAME, "Pool")
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+            vol.Required(
+                CONF_VOLUME_GALLONS,
+                default=current.get(CONF_VOLUME_GALLONS, 15000),
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=100,
+                    max=1000000,
+                    step=100,
+                    mode=NumberSelectorMode.BOX,
+                    unit_of_measurement="gallons",
+                )
+            ),
+            vol.Required(
+                CONF_WATER_BODY_TYPE,
+                default=current.get(CONF_WATER_BODY_TYPE, WaterBodyType.POOL),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[body.value for body in WaterBodyType],
+                    mode=SelectSelectorMode.DROPDOWN,
+                    translation_key="water_body_type",
+                )
+            ),
+            vol.Required(
+                CONF_POOL_TYPE,
+                default=current.get(CONF_POOL_TYPE, PoolType.CHLORINE),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[pt.value for pt in PoolType],
+                    mode=SelectSelectorMode.DROPDOWN,
+                    translation_key="pool_type",
+                )
+            ),
+        }
         return self.async_show_form(
             step_id="reconfigure_pool",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+        )
+
+    async def async_step_reconfigure_surface(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle pool surface reconfiguration, which spas do not require."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_reconfigure_entities()
+
+        return self.async_show_form(
+            step_id="reconfigure_surface",
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_POOL_NAME, default=current.get(CONF_POOL_NAME, "Pool")
-                    ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
-                    vol.Required(
-                        CONF_VOLUME_GALLONS,
-                        default=current.get(CONF_VOLUME_GALLONS, 15000),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=100,
-                            max=1000000,
-                            step=100,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="gallons",
-                        )
-                    ),
-                    vol.Required(
-                        CONF_POOL_TYPE,
-                        default=current.get(CONF_POOL_TYPE, PoolType.CHLORINE),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[pt.value for pt in PoolType],
-                            mode=SelectSelectorMode.DROPDOWN,
-                            translation_key="pool_type",
-                        )
-                    ),
-                    vol.Required(
                         CONF_SURFACE_TYPE,
-                        default=current.get(CONF_SURFACE_TYPE, SurfaceType.PLASTER),
+                        default=self._data.get(CONF_SURFACE_TYPE, SurfaceType.PLASTER),
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=[st.value for st in SurfaceType],
                             mode=SelectSelectorMode.DROPDOWN,
                             translation_key="surface_type",
                         )
-                    ),
+                    )
                 }
             ),
-            errors=errors,
         )
 
     async def async_step_reconfigure_entities(
@@ -241,33 +268,60 @@ class PoolChemConfigFlow(HAConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             self._data.update(user_input)
+            self._data.setdefault(CONF_WATER_BODY_TYPE, WaterBodyType.POOL)
+            if self._data[CONF_WATER_BODY_TYPE] == WaterBodyType.SPA:
+                self._data.pop(CONF_SURFACE_TYPE, None)
+                return await self.async_step_required_entities()
+            return await self.async_step_surface()
+
+        schema: dict[vol.Marker, Any] = {
+            vol.Required(CONF_POOL_NAME, default="Pool"): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT)
+            ),
+            vol.Required(CONF_VOLUME_GALLONS): NumberSelector(
+                NumberSelectorConfig(
+                    min=100,
+                    max=1000000,
+                    step=100,
+                    mode=NumberSelectorMode.BOX,
+                    unit_of_measurement="gallons",
+                )
+            ),
+            vol.Required(
+                CONF_WATER_BODY_TYPE, default=WaterBodyType.POOL
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[body.value for body in WaterBodyType],
+                    mode=SelectSelectorMode.DROPDOWN,
+                    translation_key="water_body_type",
+                )
+            ),
+            vol.Required(CONF_POOL_TYPE, default=PoolType.CHLORINE): SelectSelector(
+                SelectSelectorConfig(
+                    options=[pt.value for pt in PoolType],
+                    mode=SelectSelectorMode.DROPDOWN,
+                    translation_key="pool_type",
+                )
+            ),
+        }
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+        )
+
+    async def async_step_surface(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect a pool surface; spas have no pool-surface selection."""
+        if user_input is not None:
+            self._data.update(user_input)
             return await self.async_step_required_entities()
 
         return self.async_show_form(
-            step_id="user",
+            step_id="surface",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_POOL_NAME, default="Pool"): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT)
-                    ),
-                    vol.Required(CONF_VOLUME_GALLONS): NumberSelector(
-                        NumberSelectorConfig(
-                            min=100,
-                            max=1000000,
-                            step=100,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="gallons",
-                        )
-                    ),
-                    vol.Required(
-                        CONF_POOL_TYPE, default=PoolType.CHLORINE
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[pt.value for pt in PoolType],
-                            mode=SelectSelectorMode.DROPDOWN,
-                            translation_key="pool_type",
-                        )
-                    ),
                     vol.Required(
                         CONF_SURFACE_TYPE, default=SurfaceType.PLASTER
                     ): SelectSelector(
@@ -276,10 +330,9 @@ class PoolChemConfigFlow(HAConfigFlow, domain=DOMAIN):
                             mode=SelectSelectorMode.DROPDOWN,
                             translation_key="surface_type",
                         )
-                    ),
+                    )
                 }
             ),
-            errors=errors,
         )
 
     async def async_step_required_entities(
@@ -381,28 +434,42 @@ class PoolChemConfigFlow(HAConfigFlow, domain=DOMAIN):
             )
 
         is_saltwater = self._data.get(CONF_POOL_TYPE) == PoolType.SALTWATER
+        water_body = self._data.get(CONF_WATER_BODY_TYPE, WaterBodyType.POOL)
 
         schema_dict: dict[vol.Marker, Any] = {
-            vol.Optional(CONF_ENABLE_DOSE_ACID, default=DEFAULT_ENABLE_DOSE_ACID): bool,
             vol.Optional(
-                CONF_ENABLE_DOSE_CHLORINE, default=DEFAULT_ENABLE_DOSE_CHLORINE
+                CONF_ENABLE_DOSE_ACID,
+                default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_ACID),
             ): bool,
             vol.Optional(
-                CONF_ENABLE_DOSE_ALKALINITY, default=DEFAULT_ENABLE_DOSE_ALKALINITY
+                CONF_ENABLE_DOSE_CHLORINE,
+                default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_CHLORINE),
             ): bool,
             vol.Optional(
-                CONF_ENABLE_DOSE_CALCIUM, default=DEFAULT_ENABLE_DOSE_CALCIUM
+                CONF_ENABLE_DOSE_ALKALINITY,
+                default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_ALKALINITY),
             ): bool,
-            vol.Optional(CONF_ENABLE_DOSE_CYA, default=DEFAULT_ENABLE_DOSE_CYA): bool,
             vol.Optional(
-                CONF_ENABLE_DOSE_BORATES, default=DEFAULT_ENABLE_DOSE_BORATES
+                CONF_ENABLE_DOSE_CALCIUM,
+                default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_CALCIUM),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_DOSE_CYA,
+                default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_CYA),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_DOSE_BORATES,
+                default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_BORATES),
             ): bool,
         }
 
         # Only show salt dosing for saltwater pools
         if is_saltwater:
             schema_dict[
-                vol.Optional(CONF_ENABLE_DOSE_SALT, default=DEFAULT_ENABLE_DOSE_SALT)
+                vol.Optional(
+                    CONF_ENABLE_DOSE_SALT,
+                    default=default_dose_enabled(water_body, CONF_ENABLE_DOSE_SALT),
+                )
             ] = bool
 
         return self.async_show_form(
@@ -475,38 +542,51 @@ class OptionsFlowHandler(OptionsFlow):
 
         current = self.config_entry.options
         is_saltwater = self.config_entry.data.get(CONF_POOL_TYPE) == PoolType.SALTWATER
+        water_body = self.config_entry.data.get(
+            CONF_WATER_BODY_TYPE, WaterBodyType.POOL
+        )
 
         schema_dict: dict[vol.Marker, Any] = {
             vol.Optional(
                 CONF_ENABLE_DOSE_ACID,
-                default=current.get(CONF_ENABLE_DOSE_ACID, DEFAULT_ENABLE_DOSE_ACID),
+                default=current.get(
+                    CONF_ENABLE_DOSE_ACID,
+                    default_dose_enabled(water_body, CONF_ENABLE_DOSE_ACID),
+                ),
             ): bool,
             vol.Optional(
                 CONF_ENABLE_DOSE_CHLORINE,
                 default=current.get(
-                    CONF_ENABLE_DOSE_CHLORINE, DEFAULT_ENABLE_DOSE_CHLORINE
+                    CONF_ENABLE_DOSE_CHLORINE,
+                    default_dose_enabled(water_body, CONF_ENABLE_DOSE_CHLORINE),
                 ),
             ): bool,
             vol.Optional(
                 CONF_ENABLE_DOSE_ALKALINITY,
                 default=current.get(
-                    CONF_ENABLE_DOSE_ALKALINITY, DEFAULT_ENABLE_DOSE_ALKALINITY
+                    CONF_ENABLE_DOSE_ALKALINITY,
+                    default_dose_enabled(water_body, CONF_ENABLE_DOSE_ALKALINITY),
                 ),
             ): bool,
             vol.Optional(
                 CONF_ENABLE_DOSE_CALCIUM,
                 default=current.get(
-                    CONF_ENABLE_DOSE_CALCIUM, DEFAULT_ENABLE_DOSE_CALCIUM
+                    CONF_ENABLE_DOSE_CALCIUM,
+                    default_dose_enabled(water_body, CONF_ENABLE_DOSE_CALCIUM),
                 ),
             ): bool,
             vol.Optional(
                 CONF_ENABLE_DOSE_CYA,
-                default=current.get(CONF_ENABLE_DOSE_CYA, DEFAULT_ENABLE_DOSE_CYA),
+                default=current.get(
+                    CONF_ENABLE_DOSE_CYA,
+                    default_dose_enabled(water_body, CONF_ENABLE_DOSE_CYA),
+                ),
             ): bool,
             vol.Optional(
                 CONF_ENABLE_DOSE_BORATES,
                 default=current.get(
-                    CONF_ENABLE_DOSE_BORATES, DEFAULT_ENABLE_DOSE_BORATES
+                    CONF_ENABLE_DOSE_BORATES,
+                    default_dose_enabled(water_body, CONF_ENABLE_DOSE_BORATES),
                 ),
             ): bool,
         }
@@ -517,7 +597,8 @@ class OptionsFlowHandler(OptionsFlow):
                 vol.Optional(
                     CONF_ENABLE_DOSE_SALT,
                     default=current.get(
-                        CONF_ENABLE_DOSE_SALT, DEFAULT_ENABLE_DOSE_SALT
+                        CONF_ENABLE_DOSE_SALT,
+                        default_dose_enabled(water_body, CONF_ENABLE_DOSE_SALT),
                     ),
                 )
             ] = bool

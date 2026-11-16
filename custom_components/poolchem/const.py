@@ -12,6 +12,7 @@ VERSION: Final = "0.1.0"
 CONF_POOL_NAME: Final = "pool_name"
 CONF_VOLUME_GALLONS: Final = "volume_gallons"
 CONF_POOL_TYPE: Final = "pool_type"
+CONF_WATER_BODY_TYPE: Final = "water_body_type"
 CONF_SURFACE_TYPE: Final = "surface_type"
 
 # Config entry keys - Entity mapping
@@ -75,6 +76,13 @@ class PoolType(StrEnum):
     CHLORINE = "chlorine"
     SALTWATER = "saltwater"
     MINERAL = "mineral"
+
+
+class WaterBodyType(StrEnum):
+    """Water body being analyzed; distinct from its sanitizer system."""
+
+    POOL = "pool"
+    SPA = "spa"
 
 
 class SurfaceType(StrEnum):
@@ -195,3 +203,23 @@ DEFAULT_ENABLE_DOSE_CALCIUM: Final = True
 DEFAULT_ENABLE_DOSE_CYA: Final = True
 DEFAULT_ENABLE_DOSE_SALT: Final = False  # Only for saltwater pools
 DEFAULT_ENABLE_DOSE_BORATES: Final = False  # Not all pools use borates
+
+
+def default_dose_enabled(water_body_type: str, option: str) -> bool:
+    """Return safe dosing defaults for a water body.
+
+    Spa dose sensors require explicit opt-in because target and sanitizer
+    assumptions differ from pool calculations.
+    """
+    if water_body_type == WaterBodyType.SPA:
+        return False
+
+    return {
+        CONF_ENABLE_DOSE_ACID: DEFAULT_ENABLE_DOSE_ACID,
+        CONF_ENABLE_DOSE_CHLORINE: DEFAULT_ENABLE_DOSE_CHLORINE,
+        CONF_ENABLE_DOSE_ALKALINITY: DEFAULT_ENABLE_DOSE_ALKALINITY,
+        CONF_ENABLE_DOSE_CALCIUM: DEFAULT_ENABLE_DOSE_CALCIUM,
+        CONF_ENABLE_DOSE_CYA: DEFAULT_ENABLE_DOSE_CYA,
+        CONF_ENABLE_DOSE_SALT: DEFAULT_ENABLE_DOSE_SALT,
+        CONF_ENABLE_DOSE_BORATES: DEFAULT_ENABLE_DOSE_BORATES,
+    }[option]

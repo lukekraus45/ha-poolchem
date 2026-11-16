@@ -7,9 +7,14 @@
         "data": {
           "pool_name": "Pool Name",
           "volume_gallons": "Pool Volume",
-          "pool_type": "Pool Type",
-          "surface_type": "Surface Type"
+          "water_body_type": "Water Body",
+          "pool_type": "Sanitizer System"
         }
+      },
+      "surface": {
+        "title": "Pool Surface",
+        "description": "Select the pool surface. Spas do not require a pool surface.",
+        "data": {"surface_type": "Surface Type"}
       },
       "required_entities": {
         "title": "Required Sensors",
@@ -42,7 +47,7 @@
       },
       "dosing_sensors": {
         "title": "Dosing Sensors",
-        "description": "Enable or disable dosing recommendation sensors.",
+        "description": "Enable or disable dose sensors. Spa doses default off; enable them only after validating spa targets and sanitizer products.",
         "data": {
           "enable_dose_acid": "Enable Acid Dose Sensor",
           "enable_dose_chlorine": "Enable Chlorine Dose Sensor",
@@ -59,9 +64,14 @@
         "data": {
           "pool_name": "Pool Name",
           "volume_gallons": "Pool Volume",
-          "pool_type": "Pool Type",
-          "surface_type": "Surface Type"
+          "water_body_type": "Water Body",
+          "pool_type": "Sanitizer System"
         }
+      },
+      "reconfigure_surface": {
+        "title": "Pool Surface",
+        "description": "Select the pool surface. Spas do not require a pool surface.",
+        "data": {"surface_type": "Surface Type"}
       },
       "reconfigure_entities": {
         "title": "Reconfigure Sensors",
@@ -100,7 +110,7 @@
       },
       "dosing_sensors": {
         "title": "Dosing Sensors",
-        "description": "Enable or disable dosing recommendation sensors.",
+        "description": "Enable or disable dose sensors. Spa doses default off; enable them only after validating spa targets and sanitizer products.",
         "data": {
           "enable_dose_acid": "Enable Acid Dose Sensor",
           "enable_dose_chlorine": "Enable Chlorine Dose Sensor",
@@ -114,6 +124,9 @@
     }
   },
   "selector": {
+    "water_body_type": {
+      "options": {"pool": "Pool", "spa": "Spa / Hot Tub"}
+    },
     "pool_type": {
       "options": {
         "chlorine": "Traditional Chlorine",

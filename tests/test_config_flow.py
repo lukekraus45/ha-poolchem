@@ -22,11 +22,13 @@ from custom_components.poolchem.const import (
     CONF_TA_ENTITY,
     CONF_TEMP_ENTITY,
     CONF_VOLUME_GALLONS,
+    CONF_WATER_BODY_TYPE,
     DEFAULT_ACID_TYPE,
     DEFAULT_CHLORINE_TYPE,
     DOMAIN,
     PoolType,
     SurfaceType,
+    WaterBodyType,
 )
 
 
@@ -51,8 +53,12 @@ async def test_user_flow_creates_entry(
             CONF_POOL_NAME: "My Pool",
             CONF_VOLUME_GALLONS: 15000,
             CONF_POOL_TYPE: PoolType.CHLORINE,
-            CONF_SURFACE_TYPE: SurfaceType.PLASTER,
         },
+    )
+
+    assert result["step_id"] == "surface"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SURFACE_TYPE: SurfaceType.PLASTER}
     )
 
     assert result["type"] == FlowResultType.FORM
@@ -134,8 +140,12 @@ async def test_user_flow_minimal_config(
             CONF_POOL_NAME: "Simple Pool",
             CONF_VOLUME_GALLONS: 10000,
             CONF_POOL_TYPE: PoolType.CHLORINE,
-            CONF_SURFACE_TYPE: SurfaceType.VINYL,
         },
+    )
+
+    assert result["step_id"] == "surface"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SURFACE_TYPE: SurfaceType.VINYL}
     )
 
     # Step 2: Required entities
@@ -190,8 +200,12 @@ async def test_user_flow_saltwater_pool(
             CONF_POOL_NAME: "Salt Pool",
             CONF_VOLUME_GALLONS: 20000,
             CONF_POOL_TYPE: PoolType.SALTWATER,
-            CONF_SURFACE_TYPE: SurfaceType.PEBBLE,
         },
+    )
+
+    assert result["step_id"] == "surface"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SURFACE_TYPE: SurfaceType.PEBBLE}
     )
 
     # Step 2: Required entities
@@ -275,8 +289,13 @@ async def test_reconfigure_flow(
             CONF_POOL_NAME: "New Pool",
             CONF_VOLUME_GALLONS: 20000,
             CONF_POOL_TYPE: PoolType.SALTWATER,
-            CONF_SURFACE_TYPE: SurfaceType.PEBBLE,
         },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reconfigure_surface"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SURFACE_TYPE: SurfaceType.PEBBLE}
     )
 
     assert result["type"] == FlowResultType.FORM
@@ -305,3 +324,136 @@ async def test_reconfigure_flow(
     assert entry.data[CONF_SALT_ENTITY] == "sensor.pool_salt"
     # Options should be preserved
     assert entry.options[CONF_ACID_TYPE] == DEFAULT_ACID_TYPE
+
+
+async def test_spa_flow_does_not_require_pool_surface_or_enable_doses(
+    hass: HomeAssistant,
+    mock_source_entities: None,
+) -> None:
+    """A spa can be configured without a pool surface and defaults safe."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_POOL_NAME: "Test Spa",
+            CONF_VOLUME_GALLONS: 335,
+            CONF_WATER_BODY_TYPE: WaterBodyType.SPA,
+            CONF_POOL_TYPE: PoolType.MINERAL,
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "required_entities"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_TEMP_ENTITY: "sensor.pool_temp",
+            CONF_PH_ENTITY: "sensor.pool_ph",
+            CONF_FC_ENTITY: "sensor.pool_fc",
+            CONF_TA_ENTITY: "sensor.pool_ta",
+            CONF_CH_ENTITY: "sensor.pool_ch",
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_WATER_BODY_TYPE] == WaterBodyType.SPA
+    assert CONF_SURFACE_TYPE not in result["data"]
+    assert result["options"][CONF_ENABLE_DOSE_ACID] is False
+    assert result["options"]["enable_dose_chlorine"] is False
+    assert result["options"]["enable_dose_alkalinity"] is False
+    assert result["options"]["enable_dose_calcium"] is False
+    assert result["options"]["enable_dose_cya"] is False
+
+
+async def test_spa_options_flow_loads_and_keeps_dose_defaults_off(
+    hass: HomeAssistant,
+) -> None:
+    """The options flow opens for spa entries and defaults doses off."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_POOL_NAME: "Test Spa",
+            CONF_VOLUME_GALLONS: 335,
+            CONF_WATER_BODY_TYPE: WaterBodyType.SPA,
+            CONF_POOL_TYPE: PoolType.MINERAL,
+        },
+        options={},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "chemicals"
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "dosing_sensors"
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ENABLE_DOSE_ACID] is False
+    assert result["data"]["enable_dose_chlorine"] is False
+    assert result["data"]["enable_dose_alkalinity"] is False
+    assert result["data"]["enable_dose_calcium"] is False
+    assert result["data"]["enable_dose_cya"] is False
+
+
+async def test_reconfigure_pool_entry_as_spa_removes_surface(
+    hass: HomeAssistant,
+) -> None:
+    """Switching a legacy pool entry to Spa removes pool surface data."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_POOL_NAME: "Old Pool",
+            CONF_VOLUME_GALLONS: 15000,
+            CONF_POOL_TYPE: PoolType.CHLORINE,
+            CONF_SURFACE_TYPE: SurfaceType.VINYL,
+            CONF_TEMP_ENTITY: "sensor.pool_temp",
+            CONF_PH_ENTITY: "sensor.pool_ph",
+            CONF_FC_ENTITY: "sensor.pool_fc",
+            CONF_TA_ENTITY: "sensor.pool_ta",
+            CONF_CH_ENTITY: "sensor.pool_ch",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": entry.entry_id,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_POOL_NAME: "Converted Spa",
+            CONF_VOLUME_GALLONS: 335,
+            CONF_WATER_BODY_TYPE: WaterBodyType.SPA,
+            CONF_POOL_TYPE: PoolType.MINERAL,
+        },
+    )
+
+    assert result["step_id"] == "reconfigure_entities"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_TEMP_ENTITY: "sensor.pool_temp",
+            CONF_PH_ENTITY: "sensor.pool_ph",
+            CONF_FC_ENTITY: "sensor.pool_fc",
+            CONF_TA_ENTITY: "sensor.pool_ta",
+            CONF_CH_ENTITY: "sensor.pool_ch",
+        },
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_WATER_BODY_TYPE] == WaterBodyType.SPA
+    assert CONF_SURFACE_TYPE not in entry.data

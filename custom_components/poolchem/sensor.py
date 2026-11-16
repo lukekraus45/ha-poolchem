@@ -27,6 +27,7 @@ from .const import (
     CONF_ENABLE_DOSE_CYA,
     CONF_ENABLE_DOSE_SALT,
     CONF_POOL_TYPE,
+    CONF_WATER_BODY_TYPE,
     DEFAULT_ENABLE_DOSE_ACID,
     DEFAULT_ENABLE_DOSE_ALKALINITY,
     DEFAULT_ENABLE_DOSE_BORATES,
@@ -50,6 +51,8 @@ from .const import (
     SENSOR_WATER_BALANCE,
     PoolType,
     WaterBalanceState,
+    WaterBodyType,
+    default_dose_enabled,
 )
 from .coordinator import PoolChemCoordinator, PoolChemData
 from .entity import PoolChemEntity
@@ -385,21 +388,30 @@ async def async_setup_entry(
     coordinator: PoolChemCoordinator = entry.runtime_data
 
     entities: list[PoolChemSensor] = []
+    is_saltwater = entry.data.get(CONF_POOL_TYPE) == PoolType.SALTWATER
+    is_spa = (
+        entry.data.get(CONF_WATER_BODY_TYPE, WaterBodyType.POOL) == WaterBodyType.SPA
+    )
 
     # Add core water balance sensors
     for description in WATER_BALANCE_SENSORS:
+        if is_spa and description.key == SENSOR_FC_CYA_RATIO:
+            continue
         entities.append(PoolChemSensor(coordinator, description))
 
     # Add enabled dosing sensors
-    is_saltwater = entry.data.get(CONF_POOL_TYPE) == PoolType.SALTWATER
-
-    for conf_key, (sensor_key, default) in DOSING_CONFIG_MAP.items():
+    for conf_key, (sensor_key, _default) in DOSING_CONFIG_MAP.items():
         # Skip salt sensor for non-saltwater pools
-        if sensor_key == SENSOR_DOSE_SALT and not is_saltwater:
+        if sensor_key == SENSOR_DOSE_SALT and (not is_saltwater or is_spa):
             continue
 
         # Check if enabled in options
-        if entry.options.get(conf_key, default):
+        if entry.options.get(
+            conf_key,
+            default_dose_enabled(
+                entry.data.get(CONF_WATER_BODY_TYPE, WaterBodyType.POOL), conf_key
+            ),
+        ):
             description = DOSING_SENSORS[sensor_key]
             entities.append(PoolChemSensor(coordinator, description))
 

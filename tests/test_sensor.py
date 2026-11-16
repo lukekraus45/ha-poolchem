@@ -9,12 +9,23 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.poolchem.const import (
+    CONF_CH_ENTITY,
+    CONF_FC_ENTITY,
+    CONF_PH_ENTITY,
+    CONF_POOL_NAME,
+    CONF_POOL_TYPE,
+    CONF_TA_ENTITY,
+    CONF_TEMP_ENTITY,
+    CONF_VOLUME_GALLONS,
+    CONF_WATER_BODY_TYPE,
     DOMAIN,
     SENSOR_CSI,
     SENSOR_FC_CYA_RATIO,
     SENSOR_LSI,
     SENSOR_WATER_BALANCE,
+    PoolType,
     WaterBalanceState,
+    WaterBodyType,
 )
 
 
@@ -142,6 +153,44 @@ async def test_dosing_sensors_created(
     # Check alkalinity dose sensor exists
     alk_state = hass.states.get("sensor.test_pool_baking_soda_dose")
     assert alk_state is not None
+
+
+async def test_spa_defaults_hide_doses_and_pool_fc_cya_ratio(
+    hass: HomeAssistant,
+    mock_source_entities: None,
+) -> None:
+    """Spas do not inherit pool dosing defaults or pool FC/CYA heuristics."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_POOL_NAME: "Test Spa",
+            CONF_VOLUME_GALLONS: 335,
+            CONF_WATER_BODY_TYPE: WaterBodyType.SPA,
+            CONF_POOL_TYPE: PoolType.MINERAL,
+            CONF_TEMP_ENTITY: "sensor.pool_temp",
+            CONF_PH_ENTITY: "sensor.pool_ph",
+            CONF_FC_ENTITY: "sensor.pool_fc",
+            CONF_TA_ENTITY: "sensor.pool_ta",
+            CONF_CH_ENTITY: "sensor.pool_ch",
+        },
+        options={},
+    )
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("sensor.test_spa_acid_dose") is None
+    assert hass.states.get("sensor.test_spa_chlorine_dose") is None
+    assert hass.states.get("sensor.test_spa_fc_cya_ratio") is None
+    assert hass.states.get(f"sensor.test_spa_{SENSOR_CSI}") is not None
+
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(f"sensor.test_spa_{SENSOR_CSI}") is not None
+    assert hass.states.get("sensor.test_spa_acid_dose") is None
 
 
 async def test_dosing_sensor_attributes(
