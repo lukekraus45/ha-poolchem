@@ -19,7 +19,7 @@ SPAGUARD_PROFILE = {
         "per_gallons": 200,
         "unit": "tsp",
         "round_to": 0.25,
-        "wait_minutes": 15,
+        "wait_minutes": 30,
         "dose_table": [
             {"ph_min": 7.6, "ph_max": 7.8, "amount": 0.5},
             {"ph_min": 7.8, "ph_max": 8.0, "amount": 0.75},
@@ -35,7 +35,7 @@ SPAGUARD_PROFILE = {
         "raises_ppm": 25,
         "unit": "tsp",
         "round_to": 0.25,
-        "wait_minutes": 15,
+        "wait_minutes": 30,
     },
     "ph_up": {
         "product_name": "SpaGuard pH Increaser",
@@ -45,7 +45,7 @@ SPAGUARD_PROFILE = {
         "strength_percent": 100,
         "unit": "tsp",
         "round_to": 0.25,
-        "wait_minutes": 15,
+        "wait_minutes": 30,
         "dose_table": [
             {
                 "ph_min": 0,
@@ -101,9 +101,9 @@ def test_builtin_spaguard_preset_has_three_label_rules() -> None:
     assert profiles["acid"]["strength_percent"] == 93.2
     assert profiles["ph_up"]["active_ingredient"] == "Sodium carbonate"
     assert profiles["shock"]["strength_percent"] == 58.2
-    assert profiles["acid"]["wait_minutes"] == 15
-    assert profiles["ph_up"]["wait_minutes"] == 15
-    assert profiles["alkalinity"]["wait_minutes"] == 15
+    assert profiles["acid"]["wait_minutes"] == 30
+    assert profiles["ph_up"]["wait_minutes"] == 30
+    assert profiles["alkalinity"]["wait_minutes"] == 30
     assert profiles["shock"]["wait_minutes"] == 30
 
 
@@ -140,7 +140,7 @@ def test_spaguard_ph_decreaser_scales_bottle_table_for_335_gallons() -> None:
     assert result.amount == 2.5
     assert result.unit == "tsp"
     assert result.chemical.name == "SpaGuard pH Decreaser"
-    assert "15 minutes" in result.notes
+    assert "30 minutes" in result.notes
 
 
 @pytest.mark.parametrize(
@@ -159,7 +159,7 @@ def test_spaguard_decreaser_chart_boundaries(
     )
     assert result is not None
     assert result.amount == expected_amount
-    assert "15 minutes" in result.notes
+    assert "30 minutes" in result.notes
 
 
 def test_ph_label_profile_requires_label_ta_minimum() -> None:
@@ -191,7 +191,7 @@ def test_spaguard_ph_increaser_scales_bottle_chart_for_335_gallons(
     assert result.amount == expected_amount
     assert result.unit == "tsp"
     assert result.chemical.name == "SpaGuard pH Increaser"
-    assert "15 minutes" in result.notes
+    assert "30 minutes" in result.notes
 
 
 def test_spaguard_ph_increaser_suppresses_unlisted_ph_readings() -> None:
@@ -266,7 +266,7 @@ def test_spaguard_alkalinity_dose_targets_low_end_of_household_band() -> None:
     assert result is not None
     assert result.amount == 4.0
     assert result.unit == "tsp"
-    assert "15 minutes" in result.notes
+    assert "30 minutes" in result.notes
 
 
 def test_spaguard_alkalinity_dose_is_none_when_already_at_target() -> None:
