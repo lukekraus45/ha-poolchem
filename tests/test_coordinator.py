@@ -19,7 +19,6 @@ from custom_components.poolchem.const import (
     CONF_PH_UP_TYPE,
     CONF_PRODUCT_PRESET,
     CONF_PRODUCT_PROFILES,
-    CONF_TARGET_TA,
     CONF_WATER_BODY_TYPE,
     DOMAIN,
     PH_UP_SODA_ASH,
@@ -210,7 +209,6 @@ async def test_coordinator_uses_configured_spa_label_profiles(
             CONF_ENABLE_DOSE_SHOCK: True,
             CONF_PRODUCT_PRESET: "spaguard_spa",
             CONF_PRODUCT_PROFILES: "{}",
-            CONF_TARGET_TA: 250,
         },
     )
     entry.add_to_hass(hass)
@@ -220,12 +218,70 @@ async def test_coordinator_uses_configured_spa_label_profiles(
     assert coordinator.data.dose_acid is not None
     assert coordinator.data.dose_acid.amount == 2.5
     assert coordinator.data.dose_acid.unit == "tsp"
-    assert coordinator.data.dose_alkalinity is not None
-    assert coordinator.data.dose_alkalinity.amount == 4.0
-    assert coordinator.data.dose_alkalinity.unit == "tsp"
+    assert coordinator.data.dose_alkalinity is None
     assert coordinator.data.dose_shock is not None
     assert coordinator.data.dose_shock.amount == 2.0
     assert coordinator.data.dose_shock.unit == "tbsp"
+
+
+@pytest.mark.parametrize(
+    ("ph", "ta", "expected_field", "expected_amount", "expected_unit"),
+    [
+        (7.4, 70, "dose_alkalinity", 4.0, "tsp"),
+        (8.4, 70, "dose_alkalinity", 4.0, "tsp"),
+        (8.4, 124, "dose_acid", None, None),
+        (8.4, 125, "dose_acid", 2.5, "tsp"),
+        (7.0, 100, "dose_ph_up", 4.75, "tsp"),
+        (7.2, 100, "dose_ph_up", 3.25, "tsp"),
+        (7.3, 100, "dose_ph_up", 1.75, "tsp"),
+        (7.25, 100, "dose_ph_up", None, None),
+    ],
+)
+async def test_spa_poolchem_label_dose_scenarios(
+    hass: HomeAssistant,
+    mock_source_entities: None,
+    mock_config_entry_data: dict[str, Any],
+    ph: float,
+    ta: float,
+    expected_field: str,
+    expected_amount: float | None,
+    expected_unit: str | None,
+) -> None:
+    """The SpaGuard preset follows label thresholds and exact chart entries."""
+    mock_config_entry_data["volume_gallons"] = 335
+    mock_config_entry_data[CONF_WATER_BODY_TYPE] = WaterBodyType.SPA
+    hass.states.async_set("sensor.pool_ph", str(ph))
+    hass.states.async_set("sensor.pool_ta", str(ta))
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=mock_config_entry_data,
+        options={
+            CONF_ENABLE_DOSE_ACID: True,
+            CONF_ENABLE_DOSE_ALKALINITY: True,
+            CONF_ENABLE_DOSE_PH_UP: True,
+            CONF_ENABLE_DOSE_SHOCK: True,
+            CONF_PRODUCT_PRESET: "spaguard_spa",
+            CONF_PRODUCT_PROFILES: "{}",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = await async_setup_coordinator(hass, entry)
+    assert coordinator.data is not None
+    result = getattr(coordinator.data, expected_field)
+    if expected_amount is None:
+        assert result is None
+    else:
+        assert result is not None
+        assert result.amount == expected_amount
+        assert result.unit == expected_unit
+    assert coordinator.data.dose_shock is not None
+    assert coordinator.data.dose_shock.amount == 2.0
+    assert coordinator.data.dose_shock.unit == "tbsp"
+
+    for field in ("dose_acid", "dose_ph_up", "dose_alkalinity"):
+        if field != expected_field:
+            assert getattr(coordinator.data, field) is None
 
 
 async def test_ph_direction_uses_distinct_product_and_sensor(

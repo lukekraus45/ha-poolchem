@@ -25,7 +25,7 @@ SPAGUARD_SPA_PROFILE: dict[str, Any] = {
         "round_to": 0.25,
         "per_gallons": 200,
         "minimum_total_alkalinity": 125,
-        "wait_minutes": 30,
+        "wait_minutes": 15,
         "label_source": "SpaGuard package directions",
         "dose_table": [
             {"ph_min": 7.6, "ph_max": 7.8, "amount": 0.5},
@@ -42,7 +42,7 @@ SPAGUARD_SPA_PROFILE: dict[str, Any] = {
         "method": "label_table",
         "unit": "tsp",
         "round_to": 0.25,
-        "wait_minutes": 30,
+        "wait_minutes": 15,
         "label_source": "SpaGuard bottle back-label image, SKU 42632BIO",
         "dose_table": [
             {
@@ -86,6 +86,7 @@ SPAGUARD_SPA_PROFILE: dict[str, Any] = {
         "round_to": 0.25,
         "per_gallons": 100,
         "raises_ppm": 25,
+        "wait_minutes": 15,
         "label_source": "SpaGuard package directions",
     },
     "shock": {
@@ -466,7 +467,8 @@ def label_linear_dose(
         notes=profile_notes(
             profile,
             f"Label rate scaled from {float(profile['per_gallons']):g} gallons "
-            f"per {float(profile['raises_ppm']):g} ppm.",
+            f"per {float(profile['raises_ppm']):g} ppm; "
+            f"wait {int(profile.get('wait_minutes', 0))} minutes.",
         ),
     )
 
