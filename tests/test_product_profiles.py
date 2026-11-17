@@ -46,18 +46,34 @@ SPAGUARD_PROFILE = {
         "round_to": 0.25,
         "wait_minutes": 30,
         "dose_table": [
-            {"ph_min": 0, "ph_max": 7.1999, "volume_table": [
-                {"gallons": 100, "amount": 2}, {"gallons": 200, "amount": 3},
-                {"gallons": 300, "amount": 4}, {"gallons": 400, "amount": 6},
-            ]},
-            {"ph_value": 7.2, "volume_table": [
-                {"gallons": 100, "amount": 1}, {"gallons": 200, "amount": 2},
-                {"gallons": 300, "amount": 3}, {"gallons": 400, "amount": 4},
-            ]},
-            {"ph_value": 7.3, "volume_table": [
-                {"gallons": 100, "amount": 0.5}, {"gallons": 200, "amount": 1},
-                {"gallons": 300, "amount": 1.5}, {"gallons": 400, "amount": 2},
-            ]},
+            {
+                "ph_min": 0,
+                "ph_max": 7.1999,
+                "volume_table": [
+                    {"gallons": 100, "amount": 2},
+                    {"gallons": 200, "amount": 3},
+                    {"gallons": 300, "amount": 4},
+                    {"gallons": 400, "amount": 6},
+                ],
+            },
+            {
+                "ph_value": 7.2,
+                "volume_table": [
+                    {"gallons": 100, "amount": 1},
+                    {"gallons": 200, "amount": 2},
+                    {"gallons": 300, "amount": 3},
+                    {"gallons": 400, "amount": 4},
+                ],
+            },
+            {
+                "ph_value": 7.3,
+                "volume_table": [
+                    {"gallons": 100, "amount": 0.5},
+                    {"gallons": 200, "amount": 1},
+                    {"gallons": 300, "amount": 1.5},
+                    {"gallons": 400, "amount": 2},
+                ],
+            },
         ],
     },
     "shock": {
@@ -166,10 +182,15 @@ def test_spaguard_ph_increaser_suppresses_unlisted_ph_readings() -> None:
 
 
 @pytest.mark.parametrize("volume", [99, 401])
-def test_spaguard_ph_increaser_suppresses_volume_outside_label_chart(volume: int) -> None:
+def test_spaguard_ph_increaser_suppresses_volume_outside_label_chart(
+    volume: int,
+) -> None:
     result = label_table_dose(
-        SPAGUARD_PROFILE["ph_up"], current_ph=7.0, total_alkalinity=100,
-        volume_gallons=volume, chemical_type=ChemicalType.SODA_ASH,
+        SPAGUARD_PROFILE["ph_up"],
+        current_ph=7.0,
+        total_alkalinity=100,
+        volume_gallons=volume,
+        chemical_type=ChemicalType.SODA_ASH,
     )
     assert result is None
 

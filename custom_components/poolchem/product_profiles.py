@@ -252,15 +252,21 @@ def parse_product_profiles(value: str | dict[str, Any] | None) -> dict[str, Any]
                 volume_table = row.get("volume_table")
                 if volume_table is not None:
                     if not isinstance(volume_table, list) or not volume_table:
-                        raise ValueError("volume_table must contain volume and amount rows")
+                        raise ValueError(
+                            "volume_table must contain volume and amount rows"
+                        )
                     volumes = [float(item["gallons"]) for item in volume_table]
                     amounts = [float(item["amount"]) for item in volume_table]
                     if any(volume <= 0 for volume in volumes) or any(
                         amount <= 0 for amount in amounts
                     ):
-                        raise ValueError("volume_table gallons and amounts must be positive")
+                        raise ValueError(
+                            "volume_table gallons and amounts must be positive"
+                        )
                     if volumes != sorted(set(volumes)):
-                        raise ValueError("volume_table gallons must be strictly increasing")
+                        raise ValueError(
+                            "volume_table gallons must be strictly increasing"
+                        )
         if method == "label_linear":
             required = ("amount", "per_gallons", "raises_ppm")
             if any(profile.get(key) is None for key in required):
@@ -398,7 +404,9 @@ def label_table_dose(
                 points, points[1:], strict=False
             ):
                 if low_volume < volume_gallons < high_volume:
-                    fraction = (volume_gallons - low_volume) / (high_volume - low_volume)
+                    fraction = (volume_gallons - low_volume) / (
+                        high_volume - low_volume
+                    )
                     amount = low_amount + fraction * (high_amount - low_amount)
                     break
         if amount is None:
