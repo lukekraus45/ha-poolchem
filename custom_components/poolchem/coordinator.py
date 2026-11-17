@@ -549,7 +549,7 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
                             acid_profile, self._get_acid_chemical_type()
                         ),
                     )
-                else:
+                elif not self.is_spa:
                     data.dose_acid = calculate_ph_dose(
                         current_ph=ph,
                         target_ph=self.target_ph,
@@ -581,7 +581,7 @@ class PoolChemCoordinator(DataUpdateCoordinator[PoolChemData]):
                             ph_up_profile, self._get_ph_up_chemical_type()
                         ),
                     )
-                else:
+                elif not self.is_spa:
                     data.dose_ph_up = calculate_ph_dose(
                         current_ph=ph,
                         target_ph=self.target_ph,

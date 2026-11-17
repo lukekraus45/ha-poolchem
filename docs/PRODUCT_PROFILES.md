@@ -135,7 +135,10 @@ need to match before that selector is used.
 - A product profile contains a dosing rule; it is not a pump/dispensing command.
 - Current formula numeric examples in `pypoolchem` are still under investigation.
   Label-table/linear/fixed profiles bypass that formula only for the explicitly
-  configured dose categories.
+  configured dose categories. Spa entries with pH dose sensors enabled but no
+  explicit product label table suppress generic pH doses instead of falling back
+  to pool-derived math. The generic pool formula remains unchanged and must be
+  validated before pool dose sensors are enabled.
 - The product label's test prerequisites, max-per-addition caps, mixing warnings,
   and re-entry instructions remain authoritative. A timer is not a water test.
 - Keep pools and spas as separate integration entries and maintain a separate

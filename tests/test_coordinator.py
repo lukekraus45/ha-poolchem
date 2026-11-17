@@ -20,9 +20,11 @@ from custom_components.poolchem.const import (
     CONF_PRODUCT_PRESET,
     CONF_PRODUCT_PROFILES,
     CONF_TARGET_TA,
+    CONF_WATER_BODY_TYPE,
     DOMAIN,
     PH_UP_SODA_ASH,
     WaterBalanceState,
+    WaterBodyType,
 )
 from custom_components.poolchem.coordinator import PoolChemCoordinator
 
@@ -250,6 +252,31 @@ async def test_ph_direction_uses_distinct_product_and_sensor(
     assert coordinator.data.dose_ph_up is not None
     assert coordinator.data.dose_ph_up.amount > 0
     assert "soda ash" in coordinator.data.dose_ph_up.chemical.name.lower()
+
+
+async def test_spa_suppresses_generic_ph_doses_without_label_profiles(
+    hass: HomeAssistant,
+    mock_source_entities: None,
+    mock_config_entry_data: dict[str, Any],
+) -> None:
+    """A spa must not fall back to unvalidated pool pH math or products."""
+    mock_config_entry_data[CONF_WATER_BODY_TYPE] = WaterBodyType.SPA
+    hass.states.async_set("sensor.pool_ph", "8.0")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=mock_config_entry_data,
+        options={
+            CONF_ENABLE_DOSE_ACID: True,
+            CONF_ENABLE_DOSE_PH_UP: True,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = await async_setup_coordinator(hass, entry)
+
+    assert coordinator.data is not None
+    assert coordinator.data.dose_acid is None
+    assert coordinator.data.dose_ph_up is None
 
 
 async def test_twenty_percent_muriatic_acid_is_supported(
