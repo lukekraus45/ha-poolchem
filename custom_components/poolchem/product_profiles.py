@@ -34,6 +34,47 @@ SPAGUARD_SPA_PROFILE: dict[str, Any] = {
             {"ph_min": 8.4, "ph_max": 14.0, "amount": 2.0},
         ],
     },
+    "ph_up": {
+        "product_name": "SpaGuard pH Increaser",
+        "active_ingredient": "Sodium carbonate",
+        "strength_percent": 100,
+        "chemical_type": "soda_ash",
+        "method": "label_table",
+        "unit": "tsp",
+        "round_to": 0.25,
+        "wait_minutes": 30,
+        "label_source": "SpaGuard bottle back-label image, SKU 42632BIO",
+        "dose_table": [
+            {
+                "ph_min": 0,
+                "ph_max": 7.1999,
+                "volume_table": [
+                    {"gallons": 100, "amount": 2},
+                    {"gallons": 200, "amount": 3},
+                    {"gallons": 300, "amount": 4},
+                    {"gallons": 400, "amount": 6},
+                ],
+            },
+            {
+                "ph_value": 7.2,
+                "volume_table": [
+                    {"gallons": 100, "amount": 1},
+                    {"gallons": 200, "amount": 2},
+                    {"gallons": 300, "amount": 3},
+                    {"gallons": 400, "amount": 4},
+                ],
+            },
+            {
+                "ph_value": 7.3,
+                "volume_table": [
+                    {"gallons": 100, "amount": 0.5},
+                    {"gallons": 200, "amount": 1},
+                    {"gallons": 300, "amount": 1.5},
+                    {"gallons": 400, "amount": 2},
+                ],
+            },
+        ],
+    },
     "alkalinity": {
         "product_name": "SpaGuard Total Alkalinity Increaser",
         "active_ingredient": "Sodium bicarbonate",
@@ -193,12 +234,33 @@ def parse_product_profiles(value: str | dict[str, Any] | None) -> dict[str, Any]
             if not isinstance(rows, list) or not rows:
                 raise ValueError(f"{category} label_table requires dose_table rows")
             for row in rows:
-                if not isinstance(row, dict) or not all(
-                    key in row for key in ("ph_min", "ph_max", "amount")
+                if not isinstance(row, dict) or not (
+                    "amount" in row or "volume_table" in row
                 ):
-                    raise ValueError("Dose table rows require ph_min, ph_max, amount")
-                if row["ph_min"] >= row["ph_max"] or row["amount"] <= 0:
+                    raise ValueError("Dose table rows require amount or volume_table")
+                if "ph_value" in row:
+                    if not 0 <= float(row["ph_value"]) <= 14:
+                        raise ValueError("Exact pH table values must be from 0 to 14")
+                elif not all(key in row for key in ("ph_min", "ph_max")):
+                    raise ValueError(
+                        "Dose table rows require ph_value or ph_min and ph_max"
+                    )
+                elif row["ph_min"] >= row["ph_max"]:
+                    raise ValueError("Dose table ranges must have ph_min below ph_max")
+                if "amount" in row and float(row["amount"]) <= 0:
                     raise ValueError("Dose table ranges and amounts must be positive")
+                volume_table = row.get("volume_table")
+                if volume_table is not None:
+                    if not isinstance(volume_table, list) or not volume_table:
+                        raise ValueError("volume_table must contain volume and amount rows")
+                    volumes = [float(item["gallons"]) for item in volume_table]
+                    amounts = [float(item["amount"]) for item in volume_table]
+                    if any(volume <= 0 for volume in volumes) or any(
+                        amount <= 0 for amount in amounts
+                    ):
+                        raise ValueError("volume_table gallons and amounts must be positive")
+                    if volumes != sorted(set(volumes)):
+                        raise ValueError("volume_table gallons must be strictly increasing")
         if method == "label_linear":
             required = ("amount", "per_gallons", "raises_ppm")
             if any(profile.get(key) is None for key in required):
@@ -296,15 +358,55 @@ def label_table_dose(
         (
             item
             for item in profile["dose_table"]
-            if float(item["ph_min"]) <= current_ph <= float(item["ph_max"])
+            if (
+                math.isclose(
+                    current_ph,
+                    float(item["ph_value"]),
+                    rel_tol=0,
+                    abs_tol=1e-6,
+                )
+                if "ph_value" in item
+                else float(item["ph_min"]) <= current_ph <= float(item["ph_max"])
+            )
         ),
         None,
     )
     if row is None:
         return None
 
-    base_volume = float(profile.get("per_gallons", 200))
-    amount = float(row["amount"]) * volume_gallons / base_volume
+    volume_table = row.get("volume_table")
+    if volume_table:
+        points = sorted(
+            (
+                float(item["gallons"]),
+                float(item["amount"]),
+            )
+            for item in volume_table
+        )
+        if volume_gallons < points[0][0] or volume_gallons > points[-1][0]:
+            return None
+        amount = next(
+            (
+                point_amount
+                for point_volume, point_amount in points
+                if math.isclose(volume_gallons, point_volume, rel_tol=0, abs_tol=1e-9)
+            ),
+            None,
+        )
+        if amount is None:
+            for (low_volume, low_amount), (high_volume, high_amount) in zip(
+                points, points[1:], strict=False
+            ):
+                if low_volume < volume_gallons < high_volume:
+                    fraction = (volume_gallons - low_volume) / (high_volume - low_volume)
+                    amount = low_amount + fraction * (high_amount - low_amount)
+                    break
+        if amount is None:
+            return None
+        base_volume = None
+    else:
+        base_volume = float(profile.get("per_gallons", 200))
+        amount = float(row["amount"]) * volume_gallons / base_volume
     amount = _cap_amount(amount, profile, volume_gallons)
     unit = str(profile.get("unit", "tsp"))
     chemical = get_chemical(chemical_type).model_copy(
@@ -316,8 +418,12 @@ def label_table_dose(
         unit=unit,
         notes=profile_notes(
             profile,
-            f"Label dose scaled from {base_volume:g} gallons; "
-            f"wait {int(profile.get('wait_minutes', 0))} minutes.",
+            (
+                "Dose interpolated between the product label's volume rows; "
+                if base_volume is None
+                else f"Label dose scaled from {base_volume:g} gallons; "
+            )
+            + f"wait {int(profile.get('wait_minutes', 0))} minutes.",
         ),
     )
 

@@ -36,6 +36,30 @@ SPAGUARD_PROFILE = {
         "unit": "tsp",
         "round_to": 0.25,
     },
+    "ph_up": {
+        "product_name": "SpaGuard pH Increaser",
+        "method": "label_table",
+        "chemical_type": "soda_ash",
+        "active_ingredient": "Sodium carbonate",
+        "strength_percent": 100,
+        "unit": "tsp",
+        "round_to": 0.25,
+        "wait_minutes": 30,
+        "dose_table": [
+            {"ph_min": 0, "ph_max": 7.1999, "volume_table": [
+                {"gallons": 100, "amount": 2}, {"gallons": 200, "amount": 3},
+                {"gallons": 300, "amount": 4}, {"gallons": 400, "amount": 6},
+            ]},
+            {"ph_value": 7.2, "volume_table": [
+                {"gallons": 100, "amount": 1}, {"gallons": 200, "amount": 2},
+                {"gallons": 300, "amount": 3}, {"gallons": 400, "amount": 4},
+            ]},
+            {"ph_value": 7.3, "volume_table": [
+                {"gallons": 100, "amount": 0.5}, {"gallons": 200, "amount": 1},
+                {"gallons": 300, "amount": 1.5}, {"gallons": 400, "amount": 2},
+            ]},
+        ],
+    },
     "shock": {
         "product_name": "SpaGuard Enhanced Shock",
         "method": "label_fixed",
@@ -56,8 +80,9 @@ def test_parse_spaguard_product_profiles() -> None:
 
 def test_builtin_spaguard_preset_has_three_label_rules() -> None:
     profiles = load_product_profiles("spaguard_spa", "{}")
-    assert set(profiles) == {"acid", "alkalinity", "shock"}
+    assert set(profiles) == {"acid", "ph_up", "alkalinity", "shock"}
     assert profiles["acid"]["strength_percent"] == 93.2
+    assert profiles["ph_up"]["active_ingredient"] == "Sodium carbonate"
     assert profiles["shock"]["strength_percent"] == 58.2
 
 
@@ -104,6 +129,47 @@ def test_ph_label_profile_requires_label_ta_minimum() -> None:
         total_alkalinity=100,
         volume_gallons=335,
         chemical_type=ChemicalType.DRY_ACID,
+    )
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    ("current_ph", "expected_amount"),
+    [(7.0, 4.75), (7.2, 3.25), (7.3, 1.75)],
+)
+def test_spaguard_ph_increaser_scales_bottle_chart_for_335_gallons(
+    current_ph: float, expected_amount: float
+) -> None:
+    result = label_table_dose(
+        SPAGUARD_PROFILE["ph_up"],
+        current_ph=current_ph,
+        total_alkalinity=100,
+        volume_gallons=335,
+        chemical_type=ChemicalType.SODA_ASH,
+    )
+    assert result is not None
+    assert result.amount == expected_amount
+    assert result.unit == "tsp"
+    assert result.chemical.name == "SpaGuard pH Increaser"
+    assert "30 minutes" in result.notes
+
+
+def test_spaguard_ph_increaser_suppresses_unlisted_ph_readings() -> None:
+    result = label_table_dose(
+        SPAGUARD_PROFILE["ph_up"],
+        current_ph=7.25,
+        total_alkalinity=100,
+        volume_gallons=335,
+        chemical_type=ChemicalType.SODA_ASH,
+    )
+    assert result is None
+
+
+@pytest.mark.parametrize("volume", [99, 401])
+def test_spaguard_ph_increaser_suppresses_volume_outside_label_chart(volume: int) -> None:
+    result = label_table_dose(
+        SPAGUARD_PROFILE["ph_up"], current_ph=7.0, total_alkalinity=100,
+        volume_gallons=volume, chemical_type=ChemicalType.SODA_ASH,
     )
     assert result is None
 
